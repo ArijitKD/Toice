@@ -1,0 +1,9 @@
+LanguageName = English (US)
+TextboxPlaceholderLabel = Enter your text here...
+SettingsMenuTitle = Preferences
+GeneralTabName = General
+GTTSTabName = GTTS
+Pyttsx3TabName = Pyttsx3
+Pyttsx3SpeedLabel = Speech Rate (Words per minute)
+Pyttsx3VolumeLabel = Speech Volume (Percentage)
+
