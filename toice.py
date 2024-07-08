@@ -45,6 +45,8 @@ Pyttsx3VolumeLabel = Speech Volume (Percentage)
 
 ROOTDIR = os.path.dirname(__file__).replace("\\", "/")+"/"
 
+if (ROOTDIR == '/'):
+    ROOTDIR = ''
 
 if (system() == "Windows"):
     USERDIR = os.environ["LOCALAPPDATA"]+"\\"+APPNAME+"\\".replace("\\", "/")
@@ -355,12 +357,12 @@ class Toice(tk.Tk):
                         raise ValueError
                 elif (key.startswith("Pyttsx3")):
                     if (key == "Pyttsx3Speed"):
-                        int(self.config[key])
-                        if (self.config[key]>300 or self.config[key]<50):
+                        val = int(self.config[key])
+                        if (val>300 or val<50):
                             raise ValueError
                     elif (key == "Pyttsx3Volume"):
-                        int(self.config[key])
-                        if (self.config[key]>100 or self.config[key]<0):
+                        val = int(self.config[key])
+                        if (val>100 or val<0):
                             raise ValueError
             except KeyError:
                 self.log ("Missing value for "+key+", loading default value", logtype="ERROR")
