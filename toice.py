@@ -35,12 +35,24 @@ TextboxPlaceholderLabel = Enter your text here...
 
 SettingsMenuTitle = Preferences
 
+ChooseAPILabel = API to be used for Text to Speech
+
 GeneralTabName = General
 GTTSTabName = GTTS
 Pyttsx3TabName = Pyttsx3
 
 Pyttsx3SpeedLabel = Speech Rate (Words per minute)
 Pyttsx3VolumeLabel = Speech Volume (Percentage)
+Pyttsx3VoiceLabel = Voice to be used
+Pyttsx3NoVoiceError = No voice packs installed
+Pyttsx3VoiceinfoLabel = Gender supported by selected voice
+Pyttsx3VoiceGenderMale = Male
+Pyttsx3VoiceGenderFemale = Female
+Pyttsx3VoiceGenderUnknown = Unknown
+
+ButtonApply = Apply
+ButtonCancel = Cancel
+ButtonOK = OK
 '''
 
 ROOTDIR = os.path.dirname(__file__).replace("\\", "/")+"/"
@@ -74,6 +86,9 @@ UILanguage = English (US)
 
 Pyttsx3Speed = 150
 Pyttsx3Volume = 67 
+Pyttsx3VoiceID = 0
+
+APIInUse = Pyttsx3
 '''
 
 SUCCESS = 0
@@ -289,6 +304,10 @@ class Toice(tk.Tk):
             self.settingsbtn.pack_configure(ipadx=5, ipady=5)
         self.settingsbtn_canvasid = self.background.create_window(int(self.config["WindowWidth"])-20, 20, anchor=tk.NE, window=self.settingsbtn_frame)
         
+        # Add a generate speech button
+        self.generatebtn_frame = tk.Frame(self.background, bg=self.fg_color)
+        self.generatebtn = ttk.Button
+        
 
 
     def log(self, string, end="\n", logtype="INFO"):
@@ -345,25 +364,30 @@ class Toice(tk.Tk):
         for key in self.defcon.keys():
             try:
                 if (key.startswith("Window")):
-                    int(self.config[key])
+                    self.config[key] = str(int(self.config[key]))
                 elif (key.startswith("Textbox")):
                     tempwidget = tk.Text(foreground=self.config[key])
                     del tempwidget
                 elif (key.startswith("Font")):
                     if (key == "FontSize"):
-                        int(self.config[key])
+                        self.config[key] = str(int(self.config[key]))
                 elif (key == "UILanguage"):
                     if (self.config[key] not in self.supported_ui_langs):
                         raise ValueError
                 elif (key.startswith("Pyttsx3")):
                     if (key == "Pyttsx3Speed"):
                         val = int(self.config[key])
-                        if (val>300 or val<50):
+                        if (val>300 or val<50 or self.config[key].find('.') != -1):
                             raise ValueError
                     elif (key == "Pyttsx3Volume"):
                         val = int(self.config[key])
-                        if (val>100 or val<0):
+                        if (val>100 or val<0 or self.config[key].find('.') != -1):
                             raise ValueError
+                    elif (key == "Pyttsx3VoiceID"):
+                        if (int(self.config[key]) < 0 or self.config[key].find('.') != -1):
+                            raise ValueError
+                else:
+                    self.config[key]
             except KeyError:
                 self.log ("Missing value for "+key+", loading default value", logtype="ERROR")
                 self.set_default(key)
@@ -399,8 +423,13 @@ class Toice(tk.Tk):
 
 
     def show_settingsmenu(self):
+        # Running settings menu
+        self.log ("Running settings menu...")
         self.settingsmenu= ToiceSettingsMenu(self, self.config, self.uilang)
         self.settingsmenu.run()
+        self.log ("Closed settings menu, loading saved settings")
+        self.config = self.settingsmenu.config
+        self.log ("Saved settings loaded")
         
 
         
@@ -608,6 +637,7 @@ class Toice(tk.Tk):
     def run(self):
         self.deiconify()
         self.bind("<Configure>", self.window_config)
+        self.bind("<FocusIn>", lambda event: self.textbox.focus_set())
         self.textbox.focus_set()
         self.mainloop()
         
