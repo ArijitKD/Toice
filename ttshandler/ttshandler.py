@@ -7,42 +7,7 @@ from pydub import AudioSegment
 from tempfile import gettempdir
 from time import time
 from os import path
-
-
-
-class UnknownAPIError(Exception):
-    def __init__(self, message=""):
-        super().__init__(message)
-
-
-
-class TTSPropertyError(Exception):
-    def __init__(self, message=""):
-        super().__init__(message)
-
-
-
-class TTSNotGeneratedError(Exception):
-    def __init__(self, message=""):
-        super().__init__(message)
-
-
-
-class TTSConnectionError(Exception):
-    def __init__(self, message=""):
-        super().__init__(message)
-
-
-
-class TTSEngineInitializationError(Exception):
-    def __init__(self, message=""):
-        super().__init__(message)
-
-
-
-class NoFFmpegError(Exception):
-    def __init__(self, message=""):
-        super().__init__(message)
+from ttsexceptions import *
 
 
 
@@ -59,9 +24,8 @@ class TTSHandler:
         if (api.lower().strip() == "pyttsx3"):
             try:
                 self.ttsengine = pyttsx3.init()
-                raise
             except:
-                raise TTSEngineInitializationError(f"Unable to initialize TTS engine for {api}, probably no TTS engines are installed.")
+                raise TTSEngineInitializationError(f"Unable to initialize TTS engine for {api}, probably no TTS engines are installed")
         elif (api.lower().strip() == "gtts"):
             pass
         else:
