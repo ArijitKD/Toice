@@ -1,9 +1,18 @@
 LanguageName = English (US)
 TextboxPlaceholderLabel = Enter your text here...
 SettingsMenuTitle = Preferences
+ChooseAPILabel = API to be used for Text to Speech
 GeneralTabName = General
 GTTSTabName = GTTS
 Pyttsx3TabName = Pyttsx3
 Pyttsx3SpeedLabel = Speech Rate (Words per minute)
 Pyttsx3VolumeLabel = Speech Volume (Percentage)
-
+Pyttsx3VoiceLabel = Voice to be used
+Pyttsx3NoVoiceError = No voice packs installed
+Pyttsx3VoiceinfoLabel = Gender supported by selected voice
+Pyttsx3VoiceGenderMale = Male
+Pyttsx3VoiceGenderFemale = Female
+Pyttsx3VoiceGenderUnknown = Unknown
+ButtonApply = Apply
+ButtonCancel = Cancel
+ButtonOK = OK
