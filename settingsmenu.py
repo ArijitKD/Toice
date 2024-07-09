@@ -15,7 +15,7 @@ class ToiceSettingsMenu(tk.Toplevel):
         self.transient(master)
         self.title(self.uilang["SettingsMenuTitle"]+" - "+self.master.title())
 
-        self.dimensions = "400x480"
+        self.dimensions = "480x360"
 
         # Get the height and width from the dimensions and center the toplevel on the master
         self.height = int(self.dimensions[self.dimensions.index('x')+1::])
@@ -39,6 +39,12 @@ class ToiceSettingsMenu(tk.Toplevel):
         self.geometry(self.dimensions+"+%d+%d"%(center_x, center_y))
         self.resizable(0,0)
 
+        try:
+            import pyttsx3
+            self.tts = pyttsx3.init()
+        except:
+            self.tts = None
+
         self.add_widgets()
 
 
@@ -47,7 +53,7 @@ class ToiceSettingsMenu(tk.Toplevel):
         padding = "         "
 
         self.tabbed_ui = ttk.Notebook(self)
-        self.tabbed_ui.pack(fill=tk.BOTH, expand=True)
+        self.tabbed_ui.pack(fill=tk.BOTH)
 
         self.general_tab = ttk.Frame(self.tabbed_ui)
         self.add_general_widgets()
@@ -63,6 +69,30 @@ class ToiceSettingsMenu(tk.Toplevel):
         self.tabbed_ui.add(self.pyttsx3_tab, text=padding+self.uilang["Pyttsx3TabName"]+padding)
         self.tabbed_ui.add(self.gtts_tab, text=padding+self.uilang["GTTSTabName"]+padding)
 
+        self.choose_api_frame = tk.Frame(self)
+        self.choose_api_frame.pack(fill=tk.X, pady=(30, 10), padx=10)
+        self.choose_api_label = tk.Label(self.choose_api_frame, text=self.uilang["ChooseAPILabel"]+":")
+        self.choose_api_label.pack(side=tk.LEFT, padx=5)
+
+        self.choose_api_var = tk.StringVar()
+        self.choose_api_radiobutton_gtts = ttk.Radiobutton(self.choose_api_frame, text="GTTS", value="GTTS", variable=self.choose_api_var)
+        self.choose_api_radiobutton_gtts.pack(side=tk.RIGHT, padx=20)
+        self.choose_api_radiobutton_pyttsx3 = ttk.Radiobutton(self.choose_api_frame, text="Pyttsx3", value="Pyttsx3", variable=self.choose_api_var)
+        self.choose_api_radiobutton_pyttsx3.pack(side=tk.RIGHT, padx=20)
+        self.choose_api_var.set(self.config['APIInUse'])
+
+        self.buttons_frame = tk.Frame(self)
+        self.buttons_frame.pack(fill=tk.X, pady=20, padx=10)
+        self.apply_button = ttk.Button(self.buttons_frame, text=self.uilang["ButtonApply"], command = self.save_settings)
+        self.cancel_button = ttk.Button(self.buttons_frame, text=self.uilang["ButtonCancel"], command = self.exit)
+        self.ok_button = ttk.Button(self.buttons_frame, text=self.uilang["ButtonOK"], command = lambda: self.save_settings(close=True))
+        self.apply_button.pack(side=tk.RIGHT, padx=(5, 10))
+        self.cancel_button.pack(side=tk.RIGHT, padx=5)
+        self.ok_button.pack(side=tk.RIGHT, padx=(10, 5))
+        self.ok_button.bind("<Return>", lambda event: self.save_settings(close=True))
+        self.cancel_button.bind("<Return>", lambda event: self.exit())
+        self.apply_button.bind("<Return>", lambda event: self.save_settings())
+
 
     def add_general_widgets(self):
         self.general_label = ttk.Label(self.general_tab, text="Settings for this tab have not yet been added,\nPlease see the other tabs.")
@@ -70,7 +100,8 @@ class ToiceSettingsMenu(tk.Toplevel):
 
 
     def add_gtts_widgets(self):
-        pass
+        self.gtts_label = ttk.Label(self.gtts_tab, text="Settings for this tab have not yet been added,\nPlease see the other tabs.")
+        self.gtts_label.pack(expand=True)
 
 
     def add_pyttsx3_widgets(self):
@@ -97,7 +128,6 @@ class ToiceSettingsMenu(tk.Toplevel):
         self.pyttsx3_speed_slider.bind("<Button-1>", lambda event: event.widget.focus_set())
 
 
-
         self.pyttsx3_volume_frame = tk.Frame(self.pyttsx3_tab)
         self.pyttsx3_volume_frame.pack(fill=tk.X, padx=5, pady=10)
         self.pyttsx3_volume_label = tk.Label(self.pyttsx3_volume_frame, text=self.uilang["Pyttsx3VolumeLabel"]+":")
@@ -119,7 +149,70 @@ class ToiceSettingsMenu(tk.Toplevel):
         self.pyttsx3_volume_slider.pack(side=tk.RIGHT)
         self.pyttsx3_volume_slider.set(self.config["Pyttsx3Volume"])
         self.pyttsx3_volume_slider.bind("<Button-1>", lambda event: event.widget.focus_set())
+
+
+        self.pyttsx3_voice_frame = tk.Frame(self.pyttsx3_tab)
+        self.pyttsx3_voice_frame.pack(fill=tk.X, padx=5, pady=10)
+        self.pyttsx3_voice_label = tk.Label(self.pyttsx3_voice_frame, text=self.uilang["Pyttsx3VoiceLabel"]+":")
+        self.pyttsx3_voice_label.pack(side=tk.LEFT)
+        self.pyttsx3_supported_voices = self.get_pyttsx3_supported_voices()
+        self.pyttsx3_voice_combobox = ttk.Combobox(self.pyttsx3_voice_frame, values=self.pyttsx3_supported_voices, state='readonly')
+        voice_gender = "Unknown"
+        try:
+            self.pyttsx3_voice_combobox.configure(width=max([len(voice_name) for voice_name in self.pyttsx3_supported_voices]))
+            self.pyttsx3_voice_combobox.set(self.pyttsx3_supported_voices[int(self.config["Pyttsx3VoiceID"])])
+            voice_gender = self.get_pyttsx3_voice_supported_gender(int(self.config["Pyttsx3VoiceID"]))
+        except IndexError:
+            self.pyttsx3_voice_combobox.set(self.pyttsx3_supported_voices[0])
+        except ValueError:
+            self.pyttsx3_voice_combobox.configure(state=tk.DISABLED, width=len(self.uilang["Pyttsx3NoVoiceError"]))
+            self.pyttsx3_voice_combobox.set(self.uilang["Pyttsx3NoVoiceError"])
+
+        self.pyttsx3_voice_combobox.pack (padx=10, side=tk.RIGHT)
+        self.pyttsx3_voice_combobox.bind("<FocusIn>", lambda event: event.widget.selection_clear())
+        self.pyttsx3_voice_combobox.bind("<<ComboboxSelected>>", lambda event:
+        self.pyttsx3_voiceinfo_genderlabel.configure(text=self.uilang["Pyttsx3VoiceGender"+self.get_pyttsx3_voice_supported_gender(self.get_selected_voiceid())]))
         
+        self.pyttsx3_voiceinfo_frame = tk.Frame(self.pyttsx3_tab)
+        self.pyttsx3_voiceinfo_frame.pack(fill=tk.X, padx=5, pady=10)
+        self.pyttsx3_voiceinfo_label = tk.Label(self.pyttsx3_voiceinfo_frame, text=self.uilang["Pyttsx3VoiceinfoLabel"]+":")
+        self.pyttsx3_voiceinfo_label.pack(side=tk.LEFT)
+        self.pyttsx3_voiceinfo_genderlabel = tk.Label(self.pyttsx3_voiceinfo_frame, text=self.uilang["Pyttsx3VoiceGender"+voice_gender])
+        self.pyttsx3_voiceinfo_genderlabel.pack(side=tk.RIGHT, padx=10)
+        
+
+
+    def get_pyttsx3_voice_supported_gender(self, voiceid):
+        voices = self.tts.getProperty('voices')
+        gender = voices[voiceid].gender
+        gender = str(gender).strip()
+        if (gender.lower() not in ('male', 'female')):
+            gender = "Unknown"
+        return gender.capitalize()
+
+
+    def get_pyttsx3_supported_voices(self):
+        supported_voices = []
+        if (self.tts is not None):
+            voices = self.tts.getProperty('voices')
+            for voice in voices:
+                supported_voices.append(str(voice.name))
+        return supported_voices
+
+
+    def get_selected_voiceid(self):
+        voices = self.tts.getProperty('voices')
+        selected_voice_name = self.pyttsx3_voice_combobox.get()
+        voiceid = 0
+        for voice in voices:
+            if (voice.name == selected_voice_name):
+                gender = self.get_pyttsx3_voice_supported_gender(voiceid)
+                break
+            voiceid += 1
+        return voiceid
+
+        
+                
 
     def add_numerical_padding(self, n, maxdigits=3, padding="  "):
         n = str(n)
@@ -129,7 +222,20 @@ class ToiceSettingsMenu(tk.Toplevel):
         return n.replace(temppadding, padding)
 
 
+    def save_settings(self, close=False):
+        self.config["Pyttsx3Speed"] = str(self.pyttsx3_speed_var.get())
+        self.config["Pyttsx3Volume"] = str(self.pyttsx3_volume_var.get())
+        self.config["Pyttsx3VoiceID"] = str(self.get_selected_voiceid())
+        self.config["APIInUse"] = self.choose_api_var.get()
+        if (close):
+            self.exit()
+
+    def exit(self):
+        self.destroy()
+        
     def run(self):
-        self.focus_set()
+        self.ok_button.focus_set()
+        self.ok_button.configure(state=tk.ACTIVE)
         self.grab_set()
         self.master.wait_window(self)
+
