@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt 
 import numpy as np 
 import wave
-from gtts import gTTS
+import gtts
 import pyttsx3
 from pydub import AudioSegment
 from tempfile import gettempdir
@@ -28,6 +28,24 @@ class TTSNotGeneratedError(Exception):
 
 
 
+class TTSConnectionError(Exception):
+    def __init__(self, message=""):
+        super().__init__(message)
+
+
+
+class TTSEngineInitializationError(Exception):
+    def __init__(self, message=""):
+        super().__init__(message)
+
+
+
+class NoFFmpegError(Exception):
+    def __init__(self, message=""):
+        super().__init__(message)
+
+
+
 class TTSHandler:
 
     def __init__(self, text, api):
@@ -39,7 +57,11 @@ class TTSHandler:
         self.output_file = None
 
         if (api.lower().strip() == "pyttsx3"):
-            self.ttsengine = pyttsx3.init()
+            try:
+                self.ttsengine = pyttsx3.init()
+                raise
+            except:
+                raise TTSEngineInitializationError(f"Unable to initialize TTS engine for {api}, probably no TTS engines are installed.")
         elif (api.lower().strip() == "gtts"):
             pass
         else:
@@ -76,8 +98,11 @@ class TTSHandler:
         elif (self.api == 'gtts'):
             if (not output_file.lower().endswith('.mp3')):
                 output_file += ".mp3"
-            self.ttsengine = gTTS(text=self.text, lang=self.gtts_lang, tld=self.gtts_tld, slow=self.gtts_slow)
-            self.ttsengine.save(output_file)
+            self.ttsengine = gtts.gTTS(text=self.text, lang=self.gtts_lang, tld=self.gtts_tld, slow=self.gtts_slow)
+            try:
+                self.ttsengine.save(output_file)
+            except gtts.tts.gTTSError:
+                raise TTSConnectionError("%s failed to connect to TTS engine. Probably slow or no internet connection"%self.api)
             self.output_file = output_file
 
         else:
@@ -99,7 +124,10 @@ class TTSHandler:
             if (self.api == 'pyttsx3'):
                 audiofile = self.output_file
             elif (self.api == 'gtts'):
-                audio = AudioSegment.from_mp3(self.output_file)
+                try:
+                    audio = AudioSegment.from_mp3(self.output_file)
+                except FileNotFoundError:
+                    raise NoFFmpegError("FFmpeg was not found on your system, get it from https://ffmpeg.org/download.html and add it to the system PATH variable")
                 filename = "temp%d.mp3"%int(time())
                 audiofile = path.join(gettempdir(), filename)
                 audio.export(audiofile, format="wav")
