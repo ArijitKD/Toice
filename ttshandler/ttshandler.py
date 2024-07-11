@@ -12,7 +12,10 @@ import time
 from os import path
 
 # Local import
-from .ttsexceptions import *
+try:
+    from .ttsexceptions import *
+except ImportError:
+    from ttsexceptions import *
 
 
 

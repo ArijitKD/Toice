@@ -5,4 +5,7 @@ Provides a simple and intuitive API for seamless interfacing with both gtts and 
 Copyright (c) 2024 Arijit Kumar Das <arijitkdgit.official@gmail.com> under the MIT License'''
 
 
-from .ttshandler import *
+try:
+    from .ttshandler import *
+except ImportError:
+    from ttshandler import *
