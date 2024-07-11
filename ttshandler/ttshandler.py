@@ -48,7 +48,7 @@ class TTSHandler:
 
 
 
-    def set_tts_property(self, **properties):
+    def set_property(self, **properties):
         '''Set the speech properties.
 
            Pyttsx3 supported options are -rate, -volume and -voice.
@@ -65,10 +65,12 @@ class TTSHandler:
 
         if (self.api == 'pyttsx3'):
             for _property in properties:
-                if (_property == "rate" and (properties["rate"] not in range(50, 301) or type(properties["rate"]) is not int)):
-                    raise TTSPropertyError(f"Invalid value for property -rate: '{properties[_property]}', must be an integer from 50 to 300")
-                elif (_property == "volume" and (type(properties["volume"]) is str or (not 0 <= properties["volume"] <= 1.0))):
-                    raise TTSPropertyError(f"Invalid value for property -rate: '{properties[_property]}', must be a float from 0.0 to 1.0")
+                if (_property == "rate"):
+                    if (properties["rate"] not in range(50, 301) or type(properties["rate"]) is not int):
+                        raise TTSPropertyError(f"Invalid value for property -rate: '{properties[_property]}', must be an integer from 50 to 300")
+                elif (_property == "volume"):
+                    if (type(properties["volume"]) is str or (not 0 <= properties["volume"] <= 1.0)):
+                        raise TTSPropertyError(f"Invalid value for property -rate: '{properties[_property]}', must be a float from 0.0 to 1.0")
                 elif (_property == "voice"):
                     total_voices = len(self.ttsengine.getProperty('voices'))
                     invalid_flag_set = False
@@ -94,14 +96,14 @@ class TTSHandler:
                             properties["lang"] = list(supported_langs.keys())[list(supported_langs.values()).index(properties["lang"])]
                         else:
                             raise TTSPropertyError("Unsupported GTTS language: '%s'"%properties["lang"])
-                    else:
-                        raise TTSPropertyError("Unsupported GTTS language: '%s'"%properties["lang"])
-                elif (_property == 'slow' and properties['slow'] not in (1, 0, True, False)):
-                    raise TTSPropertyError("-slow must have either a boolean True or boolean False value")
-                elif (_property == 'tld' and type(properties['tld']) is not str):
-                    raise TTSPropertyError(f"-tld must be a string, not a {type(properties['tld'])} value")
+                elif (_property == 'slow'):
+                    if (properties['slow'] not in (1, 0, True, False)):
+                        raise TTSPropertyError("-slow must have either a boolean True or boolean False value")
+                elif (_property == 'tld'):
+                    if (type(properties['tld']) is not str):
+                        raise TTSPropertyError(f"-tld must be a string, not a {type(properties['tld'])} value")
                 else:
-                    raise TTSPropertyError("Unknown property '-{_property}', must be one of -tld, -lang or -slow for gtts")
+                    raise TTSPropertyError(f"Unknown property '-{_property}', must be one of -tld, -lang or -slow for gtts")
             self.gtts_tld = properties.get('tld', 'com')
             self.gtts_lang = properties.get('lang', 'en')
             self.gtts_slow = properties.get('slow', False)
@@ -165,7 +167,7 @@ class TTSHandler:
                     audio = AudioSegment.from_mp3(self.output_file)
                 except FileNotFoundError:
                     raise NoFFmpegError("FFmpeg was not found on your system, get it from https://ffmpeg.org/download.html and add it to the system PATH variable")
-                filename = "temp%d.mp3"%int(time())
+                filename = "temp%d.mp3"%int(time.time())
                 audiofile = path.join(gettempdir(), filename)
                 audio.export(audiofile, format="wav")
                 used_temp = True
