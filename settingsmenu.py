@@ -2,6 +2,7 @@
 
 import tkinter as tk
 import tkinter.ttk as ttk
+from platform import system
 
 class ToiceSettingsMenu(tk.Toplevel):
 
@@ -44,6 +45,11 @@ class ToiceSettingsMenu(tk.Toplevel):
             self.tts = pyttsx3.init()
         except:
             self.tts = None
+
+        self.style = ttk.Style()
+
+        if (system() != "Windows"):
+            self.style.theme_use('clam')
 
         self.add_widgets()
 
@@ -236,6 +242,7 @@ class ToiceSettingsMenu(tk.Toplevel):
     def run(self):
         self.ok_button.focus_set()
         self.ok_button.configure(state=tk.ACTIVE)
+        self.wait_visibility(self)
         self.grab_set()
         self.master.wait_window(self)
 

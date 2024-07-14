@@ -1,5 +1,11 @@
 LanguageName = English (US)
 TextboxPlaceholderLabel = Enter your text here...
+WaveformLabelNormal = Click the Play button to generate Text to Speech
+WaveformLabelGenerating = Generating Text to Speech audio...
+WaveformLabelPlaying = Playing Now
+WaveformLabelPaused = Speech Paused
+WaveformLabelStopped = Speech Stopped
+WaveformLabelNoTextAlert = Type some text to get audio feedback
 SettingsMenuTitle = Preferences
 ChooseAPILabel = API to be used for Text to Speech
 GeneralTabName = General

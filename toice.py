@@ -6,6 +6,20 @@
 # Gear icon on Settings button by rawpixel.com on Freepik
 # Link: https://www.freepik.com/free-vector/illustration-cogwheel_2609999.htm
 
+# Play button image from: https://www.pngwing.com/en/free-png-zazqa
+
+# Pause button image from: https://www.pngwing.com/en/free-png-zqngb
+
+# Stop button image from: https://www.pngwing.com/en/free-png-ajmth
+
+# Speaker (loud) image from: https://commons.wikimedia.org/wiki/File:Speaker_Icon.svg
+
+# Speaker (muted) image from: https://commons.wikimedia.org/wiki/File:Mute_Icon.svg
+
+# Loop button image from: https://www.pngwing.com/en/free-png-amytq
+
+# Save button from: https://www.pngegg.com/en/png-zelil
+
 # Font used: Noto Sans
 
 
@@ -13,13 +27,19 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.messagebox as mbox
 from tkinter.scrolledtext import ScrolledText
-from PIL import Image, ImageTk, ImageFilter
+
+import customtkinter as ctk
+import pygame
+from PIL import Image
+
 import os
 from shutil import copy
 from subprocess import Popen, PIPE
-from time import sleep
+import time
 from platform import system
+
 from settingsmenu import ToiceSettingsMenu
+import ttshandler as ttsh
 
 APPNAME = "Toice"
 
@@ -32,6 +52,13 @@ DEFAULT_UI_LANG = \
 '''
 LanguageName = English (US)
 TextboxPlaceholderLabel = Enter your text here...
+
+WaveformLabelNormal = Click the Play button to generate Text to Speech
+WaveformLabelGenerating = Generating Text to Speech audio...
+WaveformLabelPlaying = Playing Now
+WaveformLabelPaused = Speech Paused
+WaveformLabelStopped = Speech Stopped
+WaveformLabelNoTextAlert = Type some text to get audio feedback
 
 SettingsMenuTitle = Preferences
 
@@ -71,8 +98,8 @@ CONFIG_FILE = USERDIR+"config.cfg"
 
 DEFAULT_CONFIG = \
 '''
-WindowWidth = 800
-WindowHeight = 600
+WindowWidth = 1024
+WindowHeight = 576
 WindowX = 50
 WindowY = 50
 WindowMaximized = 0
@@ -80,7 +107,10 @@ WindowMaximized = 0
 TextboxFG = black
 TextboxBG = white
 
-FontSize = 12
+FontSize = 20
+
+AudioVolume = 67
+LoopAudio = 1
 
 UILanguage = English (US)
 
@@ -103,6 +133,9 @@ class Toice(tk.Tk):
         super().__init__()
         self.withdraw()
 
+        # Init pygame for audio playback
+        pygame.init()
+
         # Keep track of whether the Noto Sans font is being installed
         self.installed_font = False
 
@@ -120,26 +153,44 @@ class Toice(tk.Tk):
         self.orig_image = None
         self.bg_image = None
         self.tkbg_image = None
-        self.accent_color = '#060e32'
+        self.accent_color = "#25003e" #'#060e32'
         self.dominant_color_rgb = (6, 14 ,50)
-        self.fg_color = self.get_complementory(self.dominant_color_rgb)
+        self.antiaccent_color = self.get_complementory(self.dominant_color_rgb)
         self.defcon = self.get_default()
         self.defuilang = self.get_default(datatype="uilang")
         self.config = {}
         self.uilang = {}
 
+        self.ttspath = ""
+        self.text = ""
+        self.paused = False
+
+        self.configure(background=self.accent_color)
+
         # Default widget values
         '[TEXTBOX]'
-        self.textbox_frame = None
+        self.textbox = None
 
         '[SETTINGS BUTTON]'
-        self.settingsbtn_frame = None
+        self.settingsbtn = None
         self.settingsbtn_icon = None
         self.settingsbtn_text = None
 
+        '[WAVEFORM]'
+        self.waveform_frame = None
+
+        '[SEEKER]'
+        self.seeker_frame = None
+
+        '[GENERATE BUTTON]'
+        self.generatebtn_frame = None
+
+        '[CONTROL PANEL]'
+        self.control_frame = None
+
         # Set app attributes
         self.title(APPNAME)
-        self.minsize(800, 600)
+        self.minsize(1024, 576)
 
         # Set exit protocol
         self.protocol("WM_DELETE_WINDOW", self.exit)
@@ -189,6 +240,15 @@ class Toice(tk.Tk):
         # Load configuration settings
         self.load_settings()
 
+        # Loop setting
+        if (self.config["LoopAudio"] == "0"):
+            self.loops = 0
+        else:
+            self.loops = -1
+
+        # Theme
+        ctk.set_appearance_mode('dark')
+
         # Load the language pack
         self.load_ui_lang(lang=self.config["UILanguage"], langfile=self.supported_ui_langs[self.config["UILanguage"]])
         if (self.defuilang.keys() == self.uilang.keys()):
@@ -206,11 +266,11 @@ class Toice(tk.Tk):
         # Set the UI font
         if (system() == "Windows"):
             self.log ("Detected Windows system, Segoe UI font will be used for UI")
-            self.font = ('Segoe UI', int(self.config["FontSize"]))
+            self.font = ("Segoe UI", int(self.config["FontSize"]))
         else:
             if (font_load_status == SUCCESS):
                 self.log ("Detected Linux/MacOS system, Noto Sans font will be used for UI")
-                self.font = ('Noto Sans', int(self.config["FontSize"]))
+                self.font = ("Noto Sans Regular", int(self.config["FontSize"]))
             else:
                 self.log (f"Detected unsupported system! {APPNAME} will close")
                 mbox.showerror (f"Your system is currently unsupported. {APPNAME} will not run.")
@@ -229,19 +289,15 @@ class Toice(tk.Tk):
         self.geometry("%sx%s+%s+%s"%(self.config["WindowWidth"], self.config["WindowHeight"], self.config["WindowX"], self.config["WindowY"]))
 
         # Setup canvas
-        self.background = tk.Canvas(self, highlightthickness=0)
+        self.background = ctk.CTkCanvas(self, highlightthickness=0, bg=self.accent_color)
         self.background.pack(fill=tk.BOTH, expand=True)
-
+        '''
         # Load background
         if (self.load_bg_image() == SUCCESS):
             self.log ("Background image successfully loaded")
         else:
             self.log ("Failed to load background image (file probably missing)", logtype="ERROR")
-
-        # Load ttk style
-        self.ttk_style = ttk.Style()
-        if (system() != "Windows"):
-            self.ttk_style.theme_use('clam')
+        '''
 
         # Add the widgets
         self.add_widgets()
@@ -278,36 +334,235 @@ class Toice(tk.Tk):
         return SUCCESS
 
 
+    def audio_playing(self):
+        return (pygame.mixer.music.get_busy() or self.paused)
+
+
+    def pause_unpause_audio(self):
+        if (self.audio_playing()):
+            if (not self.paused):
+                pygame.mixer.music.pause()
+                self.paused = True
+                self.waveform_label.configure(text=self.uilang["WaveformLabelPaused"])
+                self.playpausebtn.configure(image=self.play_image)
+                self.playpausebtn.update_idletasks()
+            elif (self.paused):
+                pygame.mixer.music.unpause()
+                self.paused = False
+                self.waveform_label.configure(text=self.uilang["WaveformLabelPlaying"])
+                self.playpausebtn.configure(image=self.pause_image)
+                self.playpausebtn.update_idletasks()
+
+
+    def play_audio(self):
+        pygame.mixer.music.load(self.ttspath)
+        pygame.mixer.music.play(loops = self.loops)
+        self.waveform_label.configure(text=self.uilang["WaveformLabelPlaying"])
+        self.playpausebtn.configure(image=self.pause_image)
+        self.playpausebtn.update_idletasks()
+
+
+    def reset_pause_state(self):
+        if (not self.audio_playing()):
+            self.paused = False
+            self.playpausebtn.configure(image=self.play_image)
+            self.playpausebtn.update_idletasks()
+            if (self.waveform_label.cget('text') == self.uilang["WaveformLabelNoTextAlert"]):
+                return self.after (1000, lambda: (self.waveform_label.configure(text=self.uilang["WaveformLabelNormal"]), self.reset_pause_state()))
+            self.waveform_label.configure(text=self.uilang["WaveformLabelNormal"])
+        return self.after (50, self.reset_pause_state)
+
+
+    def playpause_cb(self):
+        text = self.textbox.get("1.0", tk.END).strip()
+        if (text != "" and self.text != text):
+            self.log("Generating TTS...")
+            self.waveform_label.configure(text=self.uilang["WaveformLabelGenerating"])
+            self.waveform_label.update()
+            self.tts = ttsh.TTSHandler(text, api=self.config["APIInUse"])
+            if (self.config["APIInUse"] == "pyttsx3"):
+                tts.set_property(rate=self.config["Pyttsx3Speed"], volume=self.config["Pyttsx3Volume"], voice=self.config["Pyttsx3VoiceID"])
+            else:
+                pass
+            self.ttspath = USERDIR+DIRS_IN_USERDIR["CACHE"]+str(round(time.time()))+".wav"
+            self.tts.generate_tts(self.ttspath)
+            while (True):
+                if (os.path.isfile(self.ttspath)):
+                    if (os.path.getsize(self.ttspath) == 0):
+                        pass
+                    else:
+                        break
+            self.text = text
+
+        if (text == ""):
+            self.waveform_label.configure(text=self.uilang["WaveformLabelNoTextAlert"])
+        if (os.path.isfile(self.ttspath) and not self.audio_playing() and text != ""):
+            self.log ("Running TTS...")
+            self.play_audio()
+        else:
+            self.pause_unpause_audio()
+
+
+    def stop_cb(self):
+        pygame.mixer.music.stop()
+        self.paused = False
+        self.waveform_label.configure(text=self.uilang["WaveformLabelNormal"])
+        self.playpausebtn.configure(image=self.play_image)
+        self.playpausebtn.update_idletasks()
+
+
+    def save_cb(self):
+        supported_formats = [
+                                ("WAV - High quality uncompressed audio", "*.wav"),
+                                ("MP3 - Compressed audio", "*.mp3"),
+                                ("OGG Vorbis - Suitable for streaming", "*.ogg"),
+                                ("FLAC", "*.flac"),
+                                ("AAC", "*.aac"),
+                                ("M4A", "*.m4a"),
+                                ("WMA", "*.wma"),
+                                ("AIFF", "*.aiff")
+                            ]
+        file_path = tk.filedialog.asksaveasfilename(defaultextension=".txt", filetypes=supported_formats)
+        self.log (file_path)
+
+
+    def volume_slider_cb(self, val):
+        if (self.volume_slider.get() == 0):
+            self.volume_icon.configure(image=ctk.CTkImage(self.volume_image_muted_original, size = self.volume_icon.cget('image').cget('size')))
+        else:
+            self.volume_icon.configure(image=ctk.CTkImage(self.volume_image_original, size = self.volume_icon.cget('image').cget('size')))
+        pygame.mixer.music.set_volume(val/100)
+        self.config["AudioVolume"] = str(int(val))
+
+
+    def loop_cb(self):
+        if (self.config["LoopAudio"] == "0"):
+            self.loops = -1
+            self.loopbtn.configure(fg_color='#9400ff')
+            self.config["LoopAudio"] = "1"
+        else:
+            self.loops = 0
+            self.loopbtn.configure(fg_color=self.accent_color)
+            self.config["LoopAudio"] = "0"
+
+
+    def volume_icon_cb(self):
+        if (self.volume_slider.get() != 0):
+            self.volume_slider.set(0)
+            self.config["AudioVolume"] = "0"
+            self.volume_icon.configure(image=ctk.CTkImage(self.volume_image_muted_original, size = self.volume_icon.cget('image').cget('size')))
+        else:
+            self.volume_slider.set(100)
+            self.config["AudioVolume"] = "100"
+            self.volume_icon.configure(image=ctk.CTkImage(self.volume_image_original, size = self.volume_icon.cget('image').cget('size')))
+        self.volume_slider_cb(self.volume_slider.get())
+
+
     def add_widgets(self):
 
         # Adding the Text area
-        self.textbox_frame = tk.Frame(self.background, width=round(400/800*int(self.config["WindowWidth"])), height=int(self.config["WindowHeight"])-120, bg=self.fg_color)
-        self.textbox_frame.pack_propagate(False)
-        self.textbox = ScrolledText(self.textbox_frame, background=self.config['TextboxBG'], foreground=self.config['TextboxFG'], font=self.font, borderwidth=0, highlightthickness=0)
-        self.textbox.pack(fill=tk.BOTH, expand=True, padx=1.5, pady=1.5)
-        self.background.create_window(20, 100, anchor=tk.NW, window=self.textbox_frame)
+        self.textbox = ctk.CTkTextbox(self.background, font=self.font, border_width=3,
+                                        border_color= '#5f00a4', corner_radius=10, wrap='word', fg_color='#1c1b22')
+        self.background.create_window(20, 100, anchor=tk.NW, window=self.textbox)
 
         # Add a Settings button
         settings_icon = ROOTDIR+"assets/settings.png"
         try:
-            self.settingsbtn_icon = ImageTk.PhotoImage(Image.open(settings_icon).resize((30, 30), Image.LANCZOS))
+            self.settingsbtn_icon = ctk.CTkImage(Image.open(settings_icon), size=(40, 40))
             self.log ("File %s loaded for settings button image"%(settings_icon))
         except FileNotFoundError:
             self.log ("File %s missing!"%(settings_icon), logtype="ERROR")
             self.log ("Defaulting to text instead of image for settings button")
             self.settingsbtn_text = "Settings"
-
-        self.settingsbtn_frame = tk.Frame(self.background, bg=self.fg_color)
-        self.settingsbtn = ttk.Button(self.settingsbtn_frame, text=self.settingsbtn_text, image=self.settingsbtn_icon, command=self.show_settingsmenu)
+        self.settingsbtn = ctk.CTkButton(self.background, text=self.settingsbtn_text, image=self.settingsbtn_icon, command=self.show_settingsmenu, width=60, height=60,
+                                        hover_color='#5f00a4', fg_color=self.accent_color, corner_radius=10)
         self.settingsbtn.pack(fill=tk.BOTH, expand = True, padx=1.5, pady=1.5)
         if (system() == "Windows"):
             self.settingsbtn.pack_configure(ipadx=5, ipady=5)
-        self.settingsbtn_canvasid = self.background.create_window(int(self.config["WindowWidth"])-20, 20, anchor=tk.NE, window=self.settingsbtn_frame)
+        self.settingsbtn_canvasid = self.background.create_window(int(self.config["WindowWidth"])-20, 20, anchor=tk.NE, window=self.settingsbtn)
         
-        # Add a generate speech button
-        self.generatebtn_frame = tk.Frame(self.background, bg=self.fg_color)
-        self.generatebtn = ttk.Button
-        
+        # Add a waveform image
+        self.waveform_frame = ctk.CTkFrame(self.background,  fg_color='#1c1b22', border_width=3, border_color='#5f00a4', corner_radius=10)
+        self.waveform_frame.pack_propagate(False)
+        self.waveform_canvasid = self.background.create_window(int(self.config["WindowWidth"])-20, 100, anchor=tk.NE, window=self.waveform_frame)
+        self.waveform_label = ctk.CTkLabel(self.waveform_frame, text=self.uilang["WaveformLabelNormal"], bg_color='#1c1b22', font=(self.font[0], 15))
+        self.waveform_label.pack(expand=True, padx=3, pady=3)
+
+        # Add a control panel
+        self.control_frame = ctk.CTkFrame(self.background, fg_color=self.accent_color)
+        self.control_frame.pack_propagate(False)
+        self.control_canvasid = self.background.create_window(int(self.config["WindowWidth"])-20, int(self.config["WindowHeight"])-20, anchor=tk.SE, window=self.control_frame)
+
+        # Add a seek slider in the control panel
+        self.seeker = ctk.CTkSlider(self.control_frame, from_=0, to=100, progress_color="#9400ff", fg_color='white', button_color="#9400ff", button_hover_color="#5f00a4", bg_color=self.control_frame.cget('bg_color'))
+        self.seeker.pack(fill=tk.X, side=tk.TOP, pady=30/1920*int(self.config["WindowWidth"]), padx=5)
+
+        # Add play/pause and stop buttons
+        self.button_frame = tk.Frame(self.control_frame, bg=self.control_frame.cget('bg_color'))
+        self.button_frame.pack(fill=tk.X)
+
+        self.play_image_original = Image.open(ROOTDIR+"assets/play.png")
+        self.play_image = self.play_image_original
+        self.play_image = ctk.CTkImage(self.play_image)
+
+        self.pause_image_original = Image.open(ROOTDIR+"assets/pause.png")
+        self.pause_image = self.pause_image_original
+        self.pause_image = ctk.CTkImage(self.pause_image)
+
+        self.stop_image_original = Image.open(ROOTDIR+"assets/stop.png")
+        self.stop_image = self.stop_image_original
+        self.stop_image = ctk.CTkImage(self.stop_image)
+
+        self.loop_image_original = Image.open(ROOTDIR+"assets/loop.png")
+        self.loop_image = self.loop_image_original
+        self.loop_image = ctk.CTkImage(self.loop_image)
+
+        self.save_image_original = Image.open(ROOTDIR+"assets/save.png")
+        self.save_image = self.save_image_original
+        self.save_image = ctk.CTkImage(self.save_image)
+
+        self.volume_image_original = Image.open(ROOTDIR+"assets/volume-loud.png")
+        self.volume_image = self.volume_image_original
+        self.volume_image = ctk.CTkImage(self.volume_image)
+
+        self.volume_image_muted_original = Image.open(ROOTDIR+"assets/volume-muted.png")
+        self.volume_image_muted = self.volume_image_muted_original
+        self.volume_image_muted = ctk.CTkImage(self.volume_image_muted)
+
+        self.playpausebtn = ctk.CTkButton(self.button_frame, image=self.play_image, text=None, fg_color=self.accent_color, hover_color='#5f00a4', corner_radius=10, command=self.playpause_cb)
+        self.playpausebtn.play_image = self.play_image
+        self.playpausebtn.pause_image = self.pause_image
+        self.playpausebtn.pack(side=tk.LEFT, anchor=tk.W)
+
+        self.stopbtn = ctk.CTkButton(self.button_frame, image=self.stop_image, text=None, fg_color=self.accent_color, hover_color='#5f00a4', corner_radius=10, command=self.stop_cb)
+        self.stopbtn.pack(side=tk.LEFT)
+        self.stopbtn.image = self.stop_image
+
+        self.loopbtn = ctk.CTkButton(self.button_frame, image=self.loop_image, text=None, fg_color=self.accent_color, hover_color='#5f00a4', corner_radius=10, command=self.loop_cb)
+        if (self.config["LoopAudio"] == "1"):
+            self.loopbtn.configure(fg_color='#9400ff')
+        self.loopbtn.pack(side=tk.LEFT)
+        self.loopbtn.image = self.loop_image
+
+        self.savebtn = ctk.CTkButton(self.button_frame, image=self.save_image, text=None, fg_color=self.accent_color, hover_color='#5f00a4', corner_radius=10, command=self.save_cb)
+        self.savebtn.pack(side=tk.RIGHT)
+        self.savebtn.image = self.save_image
+
+        self.volume_frame = ctk.CTkFrame(self.button_frame, fg_color=self.accent_color)
+        self.volume_frame.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+        self.volume_icon = ctk.CTkButton(self.volume_frame, text=None, image=self.volume_image, fg_color=self.accent_color, hover_color='#5f00a4', command=self.volume_icon_cb)
+        self.volume_icon.pack(side=tk.LEFT, padx=(0, 5), ipadx=1, ipady=1)
+        self.volume_icon.image = self.volume_image
+        self.volume_icon.image_muted = self.volume_image_muted
+
+        self.volume_slider = ctk.CTkSlider(self.volume_frame, from_=0, to=100, progress_color="#9400ff", fg_color='white', button_color="#9400ff", button_hover_color="#5f00a4", bg_color=self.accent_color,
+                                            command = self.volume_slider_cb)
+        self.volume_slider.set(int(self.config["AudioVolume"]))
+        pygame.mixer.music.set_volume(int(self.config["AudioVolume"])/100)
+        self.volume_slider.pack(fill=tk.X, expand=True, side=tk.RIGHT)
+
+        #self.waveform_label = tk.Label(self.waveform_frame, bg=self.accent_color)
+        #self.waveform_label.pack(fill=tk.BOTH, expand=True, padx=1.5, pady=1.5)
 
 
     def log(self, string, end="\n", logtype="INFO"):
@@ -363,8 +618,13 @@ class Toice(tk.Tk):
         # Verify configuration integrity
         for key in self.defcon.keys():
             try:
-                if (key.startswith("Window")):
+                if (key.startswith("Window") or key == "AudioVolume"):
                     self.config[key] = str(int(self.config[key]))
+                    if (key == "WindowMaximized" and int(self.config[key]) not in (0, 1)):
+                        raise ValueError
+                elif (key == "LoopAudio"):
+                    if (int(self.config[key]) not in (0, 1)):
+                        raise ValueError
                 elif (key.startswith("Textbox")):
                     tempwidget = tk.Text(foreground=self.config[key])
                     del tempwidget
@@ -486,7 +746,7 @@ class Toice(tk.Tk):
 
     def load_bg_image(self, directory=ROOTDIR):
 
-        cached_imgpath = USERDIR+DIRS_IN_USERDIR["CACHE"]+"CACHED_background-default.jpg"
+        cached_imgpath = USERDIR+DIRS_IN_USERDIR["CACHE"]+"CACHED_background.jpg"
         imgpath = directory+DIRS_IN_USERDIR["IMAGE"]+"background-default.jpg"
 
         if (os.path.isfile(cached_imgpath)):
@@ -506,13 +766,13 @@ class Toice(tk.Tk):
             self.orig_image = Image.open(imgpath)
 
             # Resize the cached image by 40% to reduce cache-size
-            cached_image = self.orig_image.resize((self.reduce(self.orig_image.size[0], 40), self.reduce(self.orig_image.size[1], 40)), Image.LANCZOS)
+            cached_image = self.orig_image.resize((1920, 1080), Image.LANCZOS)
 
             # Apply Gaussian blur on original image
             self.orig_image = self.orig_image.filter(ImageFilter.GaussianBlur(50))
 
             # Apply 40% less Gaussian blur on cached image (this will save application of blur everytime the image is loaded from cache)
-            cached_image = cached_image.filter(ImageFilter.GaussianBlur(self.reduce(50, 40)))
+            cached_image = cached_image.filter(ImageFilter.GaussianBlur(15))
 
             # Extract the accent color from the background image
             temp_img = self.orig_image.resize((150, 150))
@@ -539,73 +799,9 @@ class Toice(tk.Tk):
     def get_complementory(self, rgb: tuple):
 
         r, g, b = rgb
-        
-        if (r < 255//2 or g < 255//2 or b < 255//2):
-            r_norm = r / 255.0
-            g_norm = g / 255.0
-            b_norm = b / 255.0
-
-            cmax = max(r_norm, g_norm, b_norm)
-            cmin = min(r_norm, g_norm, b_norm)
-            delta = cmax - cmin
-
-            if delta == 0:
-                hue = 0
-            elif cmax == r_norm:
-                hue = 60 * (((g_norm - b_norm) / delta) % 6)
-            elif cmax == g_norm:
-                hue = 60 * (((b_norm - r_norm) / delta) + 2)
-            elif cmax == b_norm:
-                hue = 60 * (((r_norm - g_norm) / delta) + 4)
-            
-            if (hue < 0):
-                hue+=360
-
-            # Calculate complementary hue
-            complementary_hue = (hue + 180) % 360
-
-            # Convert complementary HSV to RGB
-            hi = int(complementary_hue / 60) % 6
-            f = (complementary_hue / 60) - hi
-            p = cmax * (1 - g_norm)
-            q = cmax * (1 - (f * (1 - g_norm)))
-            t = cmax * (1 - ((1 - f) * (1 - g_norm)))
-
-            if (hi == 0):
-                r_comp = cmax
-                g_comp = t
-                b_comp = p
-            elif (hi == 1):
-                r_comp = q
-                g_comp = cmax
-                b_comp = p
-            elif (hi == 2):
-                r_comp = p
-                g_comp = cmax
-                b_comp = t
-            elif (hi == 3):
-                r_comp = p
-                g_comp = q
-                b_comp = cmax
-            elif (hi == 4):
-                r_comp = t
-                g_comp = p
-                b_comp = cmax
-            elif (hi == 5):
-                r_comp = cmax
-                g_comp = p
-                b_comp = q
-
-            # Convert to 0-255 range
-            r_comp = int(r_comp * 255)
-            g_comp = int(g_comp * 255)
-            b_comp = int(b_comp * 255)
-
-        else:
-            r_comp = 255-r
-            g_comp = 255-g
-            b_comp = 255-b
-
+        r_comp = 255-r
+        g_comp = 255-g
+        b_comp = 255-b
         return self.get_color_code((r_comp, g_comp, b_comp))
 
 
@@ -625,20 +821,76 @@ class Toice(tk.Tk):
                 self.background.image = self.tkbg_image
                 self.background.create_image(0, 0, anchor=tk.NW, image=self.background.image)
 
-            if (self.textbox_frame is not None):
-                self.textbox_frame.configure(width=round(400/800*self.winfo_width()), height=round(self.winfo_height()-120))
+            if (self.textbox is not None):
+                self.textbox.configure(width=round(400/800*self.winfo_width()), height=round(self.winfo_height()-120))
 
-            if (self.settingsbtn_frame is not None):
+            if (self.settingsbtn is not None):
                 self.background.coords(self.settingsbtn_canvasid, self.winfo_width()-20, 20)
+
+            if (self.waveform_frame is not None):
+                self.waveform_frame.configure(width=800/1920*int(self.winfo_width()), height=250/576*self.winfo_height())
+                self.background.coords(self.waveform_canvasid, self.winfo_width()-20, 100)
+
+            if (self.seeker_frame is not None):
+                self.background.coords(self.seeker_canvasid, self.winfo_width()-self.waveform_frame.winfo_width()-20, self.winfo_height()-100)
+
+            if (self.generatebtn_frame is not None):
+                self.background.coords(self.generatebtn_canvasid, self.winfo_width()-self.waveform_frame.winfo_width()-20, self.winfo_height()-100)
+
+            if (self.control_frame is not None):
+                self.background.coords(self.control_canvasid, self.winfo_width()-20, self.winfo_height()-20)
+                self.control_frame.configure(width=800/1920*self.winfo_width(), height=self.winfo_height()-self.waveform_frame.cget('height')-140)
+                self.seeker.pack_configure(fill=tk.X, side=tk.TOP, pady=30/1920*self.winfo_height(), padx=5)
+
+                #self.play_image = self.play_image_original.resize((round(50/1080*self.winfo_height()), round(50/1080*self.winfo_height())), Image.LANCZOS)
+                self.play_image = ctk.CTkImage(self.play_image_original, size=(round(50/1080*self.winfo_height()), round(50/1080*self.winfo_height())))
+                #self.pause_image = self.pause_image_original.resize((round(50/1080*self.winfo_height()), round(50/1080*self.winfo_height())), Image.LANCZOS)
+                self.pause_image = ctk.CTkImage(self.pause_image_original, size=(round(50/1080*self.winfo_height()), round(50/1080*self.winfo_height())))
+                if (self.playpausebtn.cget('image') == self.playpausebtn.play_image):
+                    self.playpausebtn.configure(image=self.play_image, width=self.play_image.cget('size')[0], height=self.play_image.cget('size')[1])
+                elif (self.playpausebtn.cget('image') == self.playpausebtn.pause_image):
+                    self.playpausebtn.configure(image=self.pause_image, width=self.pause_image.cget('size')[0], height=self.pause_image.cget('size')[1])
+                self.playpausebtn.pack_configure(ipadx=10/1920*self.winfo_width(), ipady=10/1080*self.winfo_height())
+                self.playpausebtn.play_image = self.play_image
+                self.playpausebtn.pause_image = self.pause_image
+
+
+                #self.stop_image = self.stop_image_original.resize((round(50/1080*self.winfo_height()), round(50/1080*self.winfo_height())), Image.LANCZOS)
+                self.stop_image = ctk.CTkImage(self.stop_image_original, size=(round(50/1080*self.winfo_height()), round(50/1080*self.winfo_height())))
+                self.stopbtn.configure(image=self.stop_image, width=self.stop_image.cget('size')[0], height=self.stop_image.cget('size')[1])
+                self.stopbtn.pack_configure(padx=0.0001/1920*self.winfo_width(), ipadx=10/1920*self.winfo_width(), ipady=10/1080*self.winfo_height())
+                self.stopbtn.image = self.stop_image
+
+                self.loop_image = ctk.CTkImage(self.loop_image_original, size=(round(50/1080*self.winfo_height()), round(50/1080*self.winfo_height())))
+                self.loopbtn.configure(image=self.loop_image, width=self.loop_image.cget('size')[0], height=self.loop_image.cget('size')[1])
+                self.loopbtn.pack_configure(ipadx=10/1920*self.winfo_width(), ipady=10/1080*self.winfo_height())
+                self.loopbtn.image = self.loop_image
+
+                self.save_image = ctk.CTkImage(self.save_image_original, size=(round(50/1080*self.winfo_height()), round(50/1080*self.winfo_height())))
+                self.savebtn.configure(image=self.save_image, width=self.save_image.cget('size')[0], height=self.save_image.cget('size')[1])
+                self.savebtn.pack_configure(ipadx=10/1920*self.winfo_width(), ipady=10/1080*self.winfo_height())
+                self.savebtn.image = self.save_image
+
+                if (self.volume_slider.get() != 0):
+                    self.volume_image = ctk.CTkImage(self.volume_image_original, size=(round(40/1080*self.winfo_height()), round(40/1080*self.winfo_height())))
+                    self.volume_icon.configure(image=self.volume_image, width=self.volume_image.cget('size')[0], height=self.volume_image.cget('size')[1])
+                    self.volume_icon.image = self.volume_image
+                else:
+                    self.volume_image_muted = ctk.CTkImage(self.volume_image_muted_original, size=(round(40/1080*self.winfo_height()), round(40/1080*self.winfo_height())))
+                    self.volume_icon.configure(image=self.volume_image_muted, width=self.volume_image_muted.cget('size')[0], height=self.volume_image_muted.cget('size')[1])
+                    self.volume_icon.image_muted = self.volume_image_muted
+                self.volume_frame.pack_configure(padx=20/1024*self.winfo_width())
+
             self.lastwinwidth = self.winfo_width()
             self.lastwinheight = self.winfo_height()
 
 
     def run(self):
         self.deiconify()
-        self.bind("<Configure>", self.window_config)
+        self.bind("<Configure>", lambda event: self.after(10, self.window_config, event))
         self.bind("<FocusIn>", lambda event: self.textbox.focus_set())
         self.textbox.focus_set()
+        self.reset_pause_state()
         self.mainloop()
         
 
