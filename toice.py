@@ -59,8 +59,12 @@ WaveformLabelPlaying = Playing Now
 WaveformLabelPaused = Speech Paused
 WaveformLabelStopped = Speech Stopped
 WaveformLabelNoTextAlert = Type some text to get audio feedback
+WaveformLabelTTSNotGeneratedAlert = Nothing to Save<BREAK>No speech has been generated yet
+WaveformLabelNoConnectionAlert = You are offline<BREAK>To use GTTS, you must be online
+WaveformLabelUnknownErrorAlert = Oops! Something bad happened :(
 
 SettingsMenuTitle = Preferences
+SaveDialogTitle = Save Speech Audio
 
 ChooseAPILabel = API to be used for Text to Speech
 
@@ -97,7 +101,7 @@ else:
 CONFIG_FILE = USERDIR+"config.cfg"
 
 DEFAULT_CONFIG = \
-'''
+f'''
 WindowWidth = 1024
 WindowHeight = 576
 WindowX = 50
@@ -106,6 +110,8 @@ WindowMaximized = 0
 
 TextboxFG = black
 TextboxBG = white
+
+LastSavedInDirectory = {os.path.expanduser('~')}
 
 FontSize = 20
 
@@ -164,6 +170,8 @@ class Toice(tk.Tk):
         self.ttspath = ""
         self.text = ""
         self.paused = False
+        self.settings_changed = False
+        self.error_occured = False
 
         self.configure(background=self.accent_color)
 
@@ -367,7 +375,11 @@ class Toice(tk.Tk):
             self.paused = False
             self.playpausebtn.configure(image=self.play_image)
             self.playpausebtn.update_idletasks()
-            if (self.waveform_label.cget('text') == self.uilang["WaveformLabelNoTextAlert"]):
+            if (self.waveform_label.cget('text') in (self.uilang["WaveformLabelGenerating"],
+                                                    self.uilang["WaveformLabelNoTextAlert"],
+                                                    self.uilang["WaveformLabelTTSNotGeneratedAlert"],
+                                                    self.uilang["WaveformLabelNoConnectionAlert"],
+                                                    self.uilang["WaveformLabelUnknownErrorAlert"])):
                 return self.after (1000, lambda: (self.waveform_label.configure(text=self.uilang["WaveformLabelNormal"]), self.reset_pause_state()))
             self.waveform_label.configure(text=self.uilang["WaveformLabelNormal"])
         return self.after (50, self.reset_pause_state)
@@ -375,23 +387,35 @@ class Toice(tk.Tk):
 
     def playpause_cb(self):
         text = self.textbox.get("1.0", tk.END).strip()
-        if (text != "" and self.text != text):
+        if ((text != "" and self.text != text) or self.settings_changed or self.error_occured):
+            self.error_occured = False
+            self.settings_changed = False
             self.log("Generating TTS...")
             self.waveform_label.configure(text=self.uilang["WaveformLabelGenerating"])
             self.waveform_label.update()
             self.tts = ttsh.TTSHandler(text, api=self.config["APIInUse"])
-            if (self.config["APIInUse"] == "pyttsx3"):
-                tts.set_property(rate=self.config["Pyttsx3Speed"], volume=self.config["Pyttsx3Volume"], voice=self.config["Pyttsx3VoiceID"])
+            self.ttspath = USERDIR+DIRS_IN_USERDIR["CACHE"]+str(round(time.time()))
+            if (self.config["APIInUse"] == "Pyttsx3"):
+                self.tts.set_property(rate=int(self.config["Pyttsx3Speed"]), volume=float(self.config["Pyttsx3Volume"])/100, voice=int(self.config["Pyttsx3VoiceID"]))
+                self.ttspath += ".wav"
             else:
-                pass
-            self.ttspath = USERDIR+DIRS_IN_USERDIR["CACHE"]+str(round(time.time()))+".wav"
-            self.tts.generate_tts(self.ttspath)
-            while (True):
-                if (os.path.isfile(self.ttspath)):
-                    if (os.path.getsize(self.ttspath) == 0):
-                        pass
-                    else:
-                        break
+                self.ttspath += ".mp3"
+            try:
+                self.tts.generate_tts(self.ttspath)
+                while (True):
+                    if (os.path.isfile(self.ttspath)):
+                        if (os.path.getsize(self.ttspath) == 0):
+                            pass
+                        else:
+                            break
+            except ttsh.ttsexceptions.GTTSConnectionError:
+                self.waveform_label.configure(text=self.uilang["WaveformLabelNoConnectionAlert"])
+                self.waveform_label.update()
+                self.error_occured = True
+            except:
+                self.waveform_label.configure(text=self.uilang["WaveformLabelUnknownErrorAlert"])
+                self.waveform_label.update()
+                self.error_occured = True
             self.text = text
 
         if (text == ""):
@@ -412,9 +436,12 @@ class Toice(tk.Tk):
 
 
     def save_cb(self):
+        if (self.textbox.get("1.0", tk.END).strip() == "" or self.ttspath == ""):
+            self.waveform_label.configure(text=self.uilang["WaveformLabelTTSNotGeneratedAlert"])
+            return
         supported_formats = [
-                                ("WAV - High quality uncompressed audio", "*.wav"),
                                 ("MP3 - Compressed audio", "*.mp3"),
+                                ("WAV - High quality uncompressed audio", "*.wav"),
                                 ("OGG Vorbis - Suitable for streaming", "*.ogg"),
                                 ("FLAC", "*.flac"),
                                 ("AAC", "*.aac"),
@@ -422,8 +449,33 @@ class Toice(tk.Tk):
                                 ("WMA", "*.wma"),
                                 ("AIFF", "*.aiff")
                             ]
-        file_path = tk.filedialog.asksaveasfilename(defaultextension=".txt", filetypes=supported_formats)
-        self.log (file_path)
+        file_path = ""
+        initialfilename = "Untitled Speech"
+        tempname = initialfilename
+        i=1
+        for _file in os.listdir(self.config["LastSavedInDirectory"]):
+            if (_file.startswith(initialfilename)):
+                tempname = f"{initialfilename} ({i})"
+                i+=1
+        initialfilename = tempname
+        try:
+            if (system() == 'Windows'):
+                file_path = tk.filedialog.asksaveasfilename(title=self.uilang["SaveDialogTitle"], initialfile=initialfilename, defaultextension=".mp3", filetypes=supported_formats, initialdir=self.config["LastSavedInDirectory"])
+            else:
+                file_path = tk.filedialog.asksaveasfilename(title=self.uilang["SaveDialogTitle"], initialfile=initialfilename, filetypes=supported_formats, initialdir=self.config["LastSavedInDirectory"])
+        except:
+            pass
+        self.log(self.ttspath)
+        self.log(file_path)
+        if (file_path != ""):
+            self.config["LastSavedInDirectory"] = os.path.dirname(file_path)
+            if (self.ttspath.endswith(".wav")):
+                if (file_path.endswith(".wav")):
+                    copy(self.ttspath, file_path)
+            elif (self.ttspath.endswith(".mp3")):
+                if (file_path.endswith(".mp3")):
+                    copy(self.ttspath, file_path)
+            
 
 
     def volume_slider_cb(self, val):
@@ -622,6 +674,12 @@ class Toice(tk.Tk):
                     self.config[key] = str(int(self.config[key]))
                     if (key == "WindowMaximized" and int(self.config[key]) not in (0, 1)):
                         raise ValueError
+                elif (key == "LastSavedInDirectory"):
+                    if (not os.path.isdir(self.config["LastSavedInDirectory"])):
+                        raise ValueError
+                elif (key == "APIInUse"):
+                    if (self.config[key] not in ("Pyttsx3", "GTTS")):
+                        raise ValueError
                 elif (key == "LoopAudio"):
                     if (int(self.config[key]) not in (0, 1)):
                         raise ValueError
@@ -688,7 +746,8 @@ class Toice(tk.Tk):
         self.settingsmenu= ToiceSettingsMenu(self, self.config, self.uilang)
         self.settingsmenu.run()
         self.log ("Closed settings menu, loading saved settings")
-        self.config = self.settingsmenu.config
+        self.config = self.settingsmenu.config.copy()
+        self.settings_changed = self.settingsmenu.settings_changed
         self.log ("Saved settings loaded")
         
 

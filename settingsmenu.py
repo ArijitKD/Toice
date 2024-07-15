@@ -10,13 +10,15 @@ class ToiceSettingsMenu(tk.Toplevel):
 
         super().__init__(master)
 
-        self.config = settings_data
+        self.config = settings_data.copy()
+        self.master_config = settings_data.copy()
         self.uilang = lang_data
 
         self.transient(master)
         self.title(self.uilang["SettingsMenuTitle"]+" - "+self.master.title())
 
         self.dimensions = "480x360"
+        self.settings_changed = False
 
         # Get the height and width from the dimensions and center the toplevel on the master
         self.height = int(self.dimensions[self.dimensions.index('x')+1::])
@@ -233,6 +235,9 @@ class ToiceSettingsMenu(tk.Toplevel):
         self.config["Pyttsx3Volume"] = str(self.pyttsx3_volume_var.get())
         self.config["Pyttsx3VoiceID"] = str(self.get_selected_voiceid())
         self.config["APIInUse"] = self.choose_api_var.get()
+        if (self.config != self.master_config):
+            print ("settings changed")
+            self.settings_changed = True
         if (close):
             self.exit()
 
