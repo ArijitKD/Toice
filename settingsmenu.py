@@ -3,6 +3,7 @@
 import tkinter as tk
 import tkinter.ttk as ttk
 from platform import system
+import os
 
 class ToiceSettingsMenu(tk.Toplevel):
 
@@ -84,9 +85,9 @@ class ToiceSettingsMenu(tk.Toplevel):
 
         self.choose_api_var = tk.StringVar()
         self.choose_api_radiobutton_gtts = ttk.Radiobutton(self.choose_api_frame, text="GTTS", value="GTTS", variable=self.choose_api_var)
-        self.choose_api_radiobutton_gtts.pack(side=tk.RIGHT, padx=20)
+        self.choose_api_radiobutton_gtts.pack(side=tk.RIGHT, padx=10)
         self.choose_api_radiobutton_pyttsx3 = ttk.Radiobutton(self.choose_api_frame, text="Pyttsx3", value="Pyttsx3", variable=self.choose_api_var)
-        self.choose_api_radiobutton_pyttsx3.pack(side=tk.RIGHT, padx=20)
+        self.choose_api_radiobutton_pyttsx3.pack(side=tk.RIGHT, padx=10)
         self.choose_api_var.set(self.config['APIInUse'])
 
         self.buttons_frame = tk.Frame(self)
@@ -103,8 +104,24 @@ class ToiceSettingsMenu(tk.Toplevel):
 
 
     def add_general_widgets(self):
-        self.general_label = ttk.Label(self.general_tab, text="Settings for this tab have not yet been added,\nPlease see the other tabs.")
-        self.general_label.pack(expand=True)
+        self.general_uilanguage_frame = tk.Frame(self.general_tab)
+        self.general_uilanguage_frame.pack(fill=tk.X, padx=5, pady=(30, 20))
+        self.general_uilanguage_label = tk.Label(self.general_uilanguage_frame, text=self.uilang["UILanguageLabel"]+":")
+        self.general_uilanguage_label.pack(side=tk.LEFT)
+        langdir = os.path.dirname(__file__).replace("\\", "/")+"/languages/"
+        self.languages = []
+        try:
+            for langfile in os.listdir(langdir):
+                with open(langdir+langfile, encoding="UTF-8") as lang:
+                    langline = lang.readlines()[0]
+                    self.languages.append(langline[langline.index("=")+1::].strip())
+        except Exception as e:
+            print (e)
+            self.languages.append("English (US)")
+        self.general_uilanguage_combobox = ttk.Combobox(self.general_uilanguage_frame, values=self.languages, state='readonly', width=max([len(x) for x in self.languages]))
+        self.general_uilanguage_combobox.set(self.config["UILanguage"])
+        self.general_uilanguage_combobox.pack(padx=10, side=tk.RIGHT)
+        
 
 
     def add_gtts_widgets(self):
@@ -235,6 +252,7 @@ class ToiceSettingsMenu(tk.Toplevel):
         self.config["Pyttsx3Volume"] = str(self.pyttsx3_volume_var.get())
         self.config["Pyttsx3VoiceID"] = str(self.get_selected_voiceid())
         self.config["APIInUse"] = self.choose_api_var.get()
+        self.config["UILanguage"] = self.general_uilanguage_combobox.get()
         if (self.config != self.master_config):
             print ("settings changed")
             self.settings_changed = True

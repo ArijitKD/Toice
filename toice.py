@@ -31,6 +31,7 @@ from tkinter.scrolledtext import ScrolledText
 import customtkinter as ctk
 import pygame
 from PIL import Image
+import pydub
 
 import os
 from shutil import copy
@@ -71,6 +72,8 @@ ChooseAPILabel = API to be used for Text to Speech
 GeneralTabName = General
 GTTSTabName = GTTS
 Pyttsx3TabName = Pyttsx3
+
+UILanguageLabel = UI Language
 
 Pyttsx3SpeedLabel = Speech Rate (Words per minute)
 Pyttsx3VolumeLabel = Speech Volume (Percentage)
@@ -172,6 +175,7 @@ class Toice(tk.Tk):
         self.paused = False
         self.settings_changed = False
         self.error_occured = False
+        self.audio_length = 0
 
         self.configure(background=self.accent_color)
 
@@ -363,11 +367,52 @@ class Toice(tk.Tk):
 
 
     def play_audio(self):
+        audio = pydub.AudioSegment.from_file(self.ttspath)
+        self.audio_length = len(audio)
+        del audio
         pygame.mixer.music.load(self.ttspath)
         pygame.mixer.music.play(loops = self.loops)
+        self.seeker.configure(from_=0, to=self.audio_length-1)
+        self.update_seeker()
         self.waveform_label.configure(text=self.uilang["WaveformLabelPlaying"])
         self.playpausebtn.configure(image=self.pause_image)
         self.playpausebtn.update_idletasks()
+
+
+    def format_time(self, time_in_ms):
+        ts = int(time_in_ms/1000)
+        ts_string = str(ts)
+        time_string = ""
+        tmin = 0
+        tmin_string = str(tmin)
+        if (ts > 59):
+            tmin = ts//60
+            tmin_string = str(tmin)
+            ts = ts%60
+            ts_string = str(ts)
+        if (len(str(ts)) == 1):
+            ts_string = "0"+ts_string
+        if (len(str(tmin)) == 1):
+            tmin_string = "0"+tmin_string
+        time_string = tmin_string+":"+ts_string
+        return time_string
+        
+    def update_seeker(self):
+        if (self.audio_playing()):
+            audio_position = pygame.mixer.music.get_pos()
+            if (audio_position >= self.audio_length-1):
+                pygame.mixer.music.stop()
+                pygame.mixer.music.play(loops = self.loops)
+                self.seeker.set(0)
+                self.seeker.update_idletasks()
+                self.seeker_timelabel.configure(text=self.format_time(0))
+            else:
+                self.seeker.set(audio_position)
+                self.seeker.update_idletasks()
+                self.seeker_timelabel.configure(text=self.format_time(audio_position))
+            return self.after(10, self.update_seeker)
+        else:
+            self.seeker.set(self.audio_length-1)
 
 
     def reset_pause_state(self):
@@ -429,7 +474,11 @@ class Toice(tk.Tk):
 
     def stop_cb(self):
         pygame.mixer.music.stop()
+        self.seeker.set(0)
+        self.seeker.update_idletasks()
+        self.seeker_timelabel.configure(text=self.format_time(0))
         self.paused = False
+        self.audio_length = 0
         self.waveform_label.configure(text=self.uilang["WaveformLabelNormal"])
         self.playpausebtn.configure(image=self.play_image)
         self.playpausebtn.update_idletasks()
@@ -465,8 +514,6 @@ class Toice(tk.Tk):
                 file_path = tk.filedialog.asksaveasfilename(title=self.uilang["SaveDialogTitle"], initialfile=initialfilename, filetypes=supported_formats, initialdir=self.config["LastSavedInDirectory"])
         except:
             pass
-        self.log(self.ttspath)
-        self.log(file_path)
         if (file_path != ""):
             self.config["LastSavedInDirectory"] = os.path.dirname(file_path)
             if (self.ttspath.endswith(".wav")):
@@ -546,8 +593,13 @@ class Toice(tk.Tk):
         self.control_canvasid = self.background.create_window(int(self.config["WindowWidth"])-20, int(self.config["WindowHeight"])-20, anchor=tk.SE, window=self.control_frame)
 
         # Add a seek slider in the control panel
-        self.seeker = ctk.CTkSlider(self.control_frame, from_=0, to=100, progress_color="#9400ff", fg_color='white', button_color="#9400ff", button_hover_color="#5f00a4", bg_color=self.control_frame.cget('bg_color'))
-        self.seeker.pack(fill=tk.X, side=tk.TOP, pady=30/1920*int(self.config["WindowWidth"]), padx=5)
+        self.seeker_frame = ctk.CTkFrame(self.control_frame,  fg_color=self.accent_color)
+        self.seeker_frame.pack(fill=tk.X, side=tk.TOP)
+        self.seeker_timelabel = ctk.CTkLabel(self.seeker_frame, text="00:00", font=(self.font[0], 15))
+        self.seeker_timelabel.pack(side=tk.RIGHT, padx=5)
+        self.seeker = ctk.CTkSlider(self.seeker_frame, progress_color="#9400ff", fg_color='white', button_color="#9400ff", button_hover_color="#5f00a4", bg_color=self.control_frame.cget('bg_color'))
+        self.seeker.pack(side=tk.LEFT, fill=tk.X, pady=30/1920*int(self.config["WindowWidth"]), padx=5)
+        self.seeker.set(0)
 
         # Add play/pause and stop buttons
         self.button_frame = tk.Frame(self.control_frame, bg=self.control_frame.cget('bg_color'))
@@ -889,9 +941,6 @@ class Toice(tk.Tk):
             if (self.waveform_frame is not None):
                 self.waveform_frame.configure(width=800/1920*int(self.winfo_width()), height=250/576*self.winfo_height())
                 self.background.coords(self.waveform_canvasid, self.winfo_width()-20, 100)
-
-            if (self.seeker_frame is not None):
-                self.background.coords(self.seeker_canvasid, self.winfo_width()-self.waveform_frame.winfo_width()-20, self.winfo_height()-100)
 
             if (self.generatebtn_frame is not None):
                 self.background.coords(self.generatebtn_canvasid, self.winfo_width()-self.waveform_frame.winfo_width()-20, self.winfo_height()-100)
