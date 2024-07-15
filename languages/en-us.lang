@@ -15,6 +15,7 @@ ChooseAPILabel = API to be used for Text to Speech
 GeneralTabName = General
 GTTSTabName = GTTS
 Pyttsx3TabName = Pyttsx3
+UILanguageLabel = UI Language
 Pyttsx3SpeedLabel = Speech Rate (Words per minute)
 Pyttsx3VolumeLabel = Speech Volume (Percentage)
 Pyttsx3VoiceLabel = Voice to be used
