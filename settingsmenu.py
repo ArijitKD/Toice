@@ -226,14 +226,15 @@ class ToiceSettingsMenu(tk.Toplevel):
 
 
     def get_selected_voiceid(self):
-        voices = self.tts.getProperty('voices')
         selected_voice_name = self.pyttsx3_voice_combobox.get()
         voiceid = 0
-        for voice in voices:
-            if (voice.name == selected_voice_name):
-                gender = self.get_pyttsx3_voice_supported_gender(voiceid)
-                break
-            voiceid += 1
+        if (self.tts is not None):
+            voices = self.tts.getProperty('voices')
+            for voice in voices:
+                if (voice.name == selected_voice_name):
+                    gender = self.get_pyttsx3_voice_supported_gender(voiceid)
+                    break
+                voiceid += 1
         return voiceid
 
         

@@ -400,7 +400,7 @@ class Toice(tk.Tk):
     def update_seeker(self):
         if (self.audio_playing()):
             audio_position = pygame.mixer.music.get_pos()
-            if (audio_position >= self.audio_length-1):
+            if (audio_position == self.audio_length):
                 pygame.mixer.music.stop()
                 pygame.mixer.music.play(loops = self.loops)
                 self.seeker.set(0)
