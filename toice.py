@@ -20,6 +20,8 @@
 
 # Save button from: https://www.pngegg.com/en/png-zelil
 
+# About icon from: https://www.pngegg.com/en/png-oayss
+
 # Font used: Noto Sans
 
 
@@ -183,10 +185,8 @@ class Toice(tk.Tk):
         '[TEXTBOX]'
         self.textbox = None
 
-        '[SETTINGS BUTTON]'
-        self.settingsbtn = None
-        self.settingsbtn_icon = None
-        self.settingsbtn_text = None
+        '[TOOL FRAME]'
+        self.tool_frame = None
 
         '[WAVEFORM]'
         self.waveform_frame = None
@@ -303,13 +303,6 @@ class Toice(tk.Tk):
         # Setup canvas
         self.background = ctk.CTkCanvas(self, highlightthickness=0, bg=self.accent_color)
         self.background.pack(fill=tk.BOTH, expand=True)
-        '''
-        # Load background
-        if (self.load_bg_image() == SUCCESS):
-            self.log ("Background image successfully loaded")
-        else:
-            self.log ("Failed to load background image (file probably missing)", logtype="ERROR")
-        '''
 
         # Add the widgets
         self.add_widgets()
@@ -400,9 +393,10 @@ class Toice(tk.Tk):
     def update_seeker(self):
         if (self.audio_playing()):
             audio_position = pygame.mixer.music.get_pos()
-            if (audio_position == self.audio_length):
+            if (audio_position >= self.audio_length):
                 pygame.mixer.music.stop()
-                pygame.mixer.music.play(loops = self.loops)
+                if (self.loops == -1):
+                    pygame.mixer.music.play(loops = self.loops)
                 self.seeker.set(0)
                 self.seeker.update_idletasks()
                 self.seeker_timelabel.configure(text=self.format_time(0))
@@ -412,7 +406,9 @@ class Toice(tk.Tk):
                 self.seeker_timelabel.configure(text=self.format_time(audio_position))
             return self.after(10, self.update_seeker)
         else:
-            self.seeker.set(self.audio_length-1)
+            self.seeker.set(0)
+            self.seeker.update_idletasks()
+            self.seeker_timelabel.configure(text=self.format_time(0))
 
 
     def reset_pause_state(self):
@@ -565,20 +561,17 @@ class Toice(tk.Tk):
         self.background.create_window(20, 100, anchor=tk.NW, window=self.textbox)
 
         # Add a Settings button
-        settings_icon = ROOTDIR+"assets/settings.png"
-        try:
-            self.settingsbtn_icon = ctk.CTkImage(Image.open(settings_icon), size=(40, 40))
-            self.log ("File %s loaded for settings button image"%(settings_icon))
-        except FileNotFoundError:
-            self.log ("File %s missing!"%(settings_icon), logtype="ERROR")
-            self.log ("Defaulting to text instead of image for settings button")
-            self.settingsbtn_text = "Settings"
-        self.settingsbtn = ctk.CTkButton(self.background, text=self.settingsbtn_text, image=self.settingsbtn_icon, command=self.show_settingsmenu, width=60, height=60,
+        self.settingsbtn_icon = ctk.CTkImage(Image.open(ROOTDIR+"assets/settings.png"), size=(40, 40))
+        self.aboutbtn_icon = ctk.CTkImage(Image.open(ROOTDIR+"assets/about.png"), size=(40, 40))
+
+        self.tool_frame = ctk.CTkFrame(self.background, fg_color=self.accent_color)
+        self.settingsbtn = ctk.CTkButton(self.tool_frame, image=self.settingsbtn_icon, text=None, command=self.show_settingsmenu, width=60, height=60,
                                         hover_color='#5f00a4', fg_color=self.accent_color, corner_radius=10)
-        self.settingsbtn.pack(fill=tk.BOTH, expand = True, padx=1.5, pady=1.5)
-        if (system() == "Windows"):
-            self.settingsbtn.pack_configure(ipadx=5, ipady=5)
-        self.settingsbtn_canvasid = self.background.create_window(int(self.config["WindowWidth"])-20, 20, anchor=tk.NE, window=self.settingsbtn)
+        self.settingsbtn.pack(side=tk.RIGHT, padx=(10, 0))
+        self.aboutbtn = ctk.CTkButton(self.tool_frame, image=self.aboutbtn_icon, text=None, command=self.show_settingsmenu, width=60, height=60,
+                                        hover_color='#5f00a4', fg_color=self.accent_color, corner_radius=10)
+        self.aboutbtn.pack(side=tk.LEFT)
+        self.tool_frame_canvasid = self.background.create_window(int(self.config["WindowWidth"])-20, 20, anchor=tk.NE, window=self.tool_frame)
         
         # Add a waveform image
         self.waveform_frame = ctk.CTkFrame(self.background,  fg_color='#1c1b22', border_width=3, border_color='#5f00a4', corner_radius=10)
@@ -935,8 +928,8 @@ class Toice(tk.Tk):
             if (self.textbox is not None):
                 self.textbox.configure(width=round(400/800*self.winfo_width()), height=round(self.winfo_height()-120))
 
-            if (self.settingsbtn is not None):
-                self.background.coords(self.settingsbtn_canvasid, self.winfo_width()-20, 20)
+            if (self.tool_frame is not None):
+                self.background.coords(self.tool_frame_canvasid, self.winfo_width()-20, 20)
 
             if (self.waveform_frame is not None):
                 self.waveform_frame.configure(width=800/1920*int(self.winfo_width()), height=250/576*self.winfo_height())
