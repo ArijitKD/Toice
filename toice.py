@@ -31,8 +31,8 @@ import tkinter.messagebox as mbox
 from tkinter.scrolledtext import ScrolledText
 
 import customtkinter as ctk
-import pygame
-from PIL import Image
+from pygame import mixer
+from PIL import Image, ImageTk
 import pydub
 
 import os
@@ -68,6 +68,9 @@ WaveformLabelUnknownErrorAlert = Oops! Something bad happened :(
 
 SettingsMenuTitle = Preferences
 SaveDialogTitle = Save Speech Audio
+AboutTitle = About Toice
+
+UILanguageChangeAlert = You have changed the UI language of Toice. To apply this change, Toice needs to restart.<BREAK><BREAK>Do you want to restart now?
 
 ChooseAPILabel = API to be used for Text to Speech
 
@@ -144,8 +147,15 @@ class Toice(tk.Tk):
         super().__init__()
         self.withdraw()
 
-        # Init pygame for audio playback
-        pygame.init()
+        self.icon = None
+        try:
+            self.icon = ImageTk.PhotoImage(Image.open(ROOTDIR+"assets/toice.png").resize((64, 64), Image.LANCZOS))
+            self.wm_iconphoto(True, self.icon)
+        except FileNotFoundError:
+            self.log ("App icon not found!")
+
+        # Init pygame mixer for audio playback
+        mixer.init()
 
         # Keep track of whether the Noto Sans font is being installed
         self.installed_font = False
@@ -340,19 +350,19 @@ class Toice(tk.Tk):
 
 
     def audio_playing(self):
-        return (pygame.mixer.music.get_busy() or self.paused)
+        return (mixer.music.get_busy() or self.paused)
 
 
     def pause_unpause_audio(self):
         if (self.audio_playing()):
             if (not self.paused):
-                pygame.mixer.music.pause()
+                mixer.music.pause()
                 self.paused = True
                 self.waveform_label.configure(text=self.uilang["WaveformLabelPaused"])
                 self.playpausebtn.configure(image=self.play_image)
                 self.playpausebtn.update_idletasks()
             elif (self.paused):
-                pygame.mixer.music.unpause()
+                mixer.music.unpause()
                 self.paused = False
                 self.waveform_label.configure(text=self.uilang["WaveformLabelPlaying"])
                 self.playpausebtn.configure(image=self.pause_image)
@@ -363,8 +373,8 @@ class Toice(tk.Tk):
         audio = pydub.AudioSegment.from_file(self.ttspath)
         self.audio_length = len(audio)
         del audio
-        pygame.mixer.music.load(self.ttspath)
-        pygame.mixer.music.play(loops = self.loops)
+        mixer.music.load(self.ttspath)
+        mixer.music.play(loops = self.loops)
         self.seeker.configure(from_=0, to=self.audio_length-1)
         self.update_seeker()
         self.waveform_label.configure(text=self.uilang["WaveformLabelPlaying"])
@@ -392,11 +402,11 @@ class Toice(tk.Tk):
         
     def update_seeker(self):
         if (self.audio_playing()):
-            audio_position = pygame.mixer.music.get_pos()
+            audio_position = mixer.music.get_pos()
             if (audio_position >= self.audio_length):
-                pygame.mixer.music.stop()
+                mixer.music.stop()
                 if (self.loops == -1):
-                    pygame.mixer.music.play(loops = self.loops)
+                    mixer.music.play(loops = self.loops)
                 self.seeker.set(0)
                 self.seeker.update_idletasks()
                 self.seeker_timelabel.configure(text=self.format_time(0))
@@ -449,10 +459,11 @@ class Toice(tk.Tk):
                             pass
                         else:
                             break
-            except ttsh.ttsexceptions.GTTSConnectionError:
+            except ttsh.ttsexceptions.GTTSConnectionError as e:
                 self.waveform_label.configure(text=self.uilang["WaveformLabelNoConnectionAlert"])
                 self.waveform_label.update()
                 self.error_occured = True
+                self.log (e, logtype="ERROR")
             except:
                 self.waveform_label.configure(text=self.uilang["WaveformLabelUnknownErrorAlert"])
                 self.waveform_label.update()
@@ -461,7 +472,7 @@ class Toice(tk.Tk):
 
         if (text == ""):
             self.waveform_label.configure(text=self.uilang["WaveformLabelNoTextAlert"])
-        if (os.path.isfile(self.ttspath) and not self.audio_playing() and text != ""):
+        if (os.path.isfile(self.ttspath) and not self.audio_playing() and text != "" and not self.error_occured):
             self.log ("Running TTS...")
             self.play_audio()
         else:
@@ -469,7 +480,7 @@ class Toice(tk.Tk):
 
 
     def stop_cb(self):
-        pygame.mixer.music.stop()
+        mixer.music.stop()
         self.seeker.set(0)
         self.seeker.update_idletasks()
         self.seeker_timelabel.configure(text=self.format_time(0))
@@ -515,9 +526,16 @@ class Toice(tk.Tk):
             if (self.ttspath.endswith(".wav")):
                 if (file_path.endswith(".wav")):
                     copy(self.ttspath, file_path)
+                else:
+                    audio = pydub.AudioSegment.from_wav(self.ttspath)
+                    audio.export(file_path)
             elif (self.ttspath.endswith(".mp3")):
                 if (file_path.endswith(".mp3")):
                     copy(self.ttspath, file_path)
+                else:
+                    audio = pydub.AudioSegment.from_mp3(self.ttspath)
+                    audio.export(file_path)
+            self.log("Audio saved successfully!")
             
 
 
@@ -526,7 +544,7 @@ class Toice(tk.Tk):
             self.volume_icon.configure(image=ctk.CTkImage(self.volume_image_muted_original, size = self.volume_icon.cget('image').cget('size')))
         else:
             self.volume_icon.configure(image=ctk.CTkImage(self.volume_image_original, size = self.volume_icon.cget('image').cget('size')))
-        pygame.mixer.music.set_volume(val/100)
+        mixer.music.set_volume(val/100)
         self.config["AudioVolume"] = str(int(val))
 
 
@@ -553,11 +571,59 @@ class Toice(tk.Tk):
         self.volume_slider_cb(self.volume_slider.get())
 
 
+    def show_about(self):
+        self.about_window = tk.Toplevel(self)
+        self.about_window.transient(self)
+        self.about_window.title(self.uilang["AboutTitle"])
+        self.about_window.dimensions = "480x360"
+
+        # Get the height and width from the dimensions and center the toplevel on the master
+        self.about_window.height = int(self.about_window.dimensions[self.about_window.dimensions.index('x')+1::])
+        self.about_window.width = int(self.about_window.dimensions[0:self.about_window.dimensions.index('x')])
+        center_x = int(self.winfo_rootx()+self.winfo_width()-self.about_window.width-self.winfo_width()/2+self.about_window.width/2)
+        center_y = int(self.winfo_rooty()+self.winfo_height()-self.about_window.height-self.winfo_height()/2+self.about_window.height/2)
+
+        if (center_x+self.about_window.width > self.winfo_screenwidth()):
+            center_x = self.winfo_screenwidth() - self.about_window.width - 20
+        if (center_y+self.about_window.height > self.winfo_screenheight()):
+            center_y = self.winfo_screenheight() - self.about_window.height - 20
+        if (center_x+self.about_window.width < self.winfo_width()//2):
+            center_x = 20
+        if (center_y+self.about_window.height < self.winfo_height()//2):
+            center_y = 20   
+        if (center_x < 0):
+            center_x = int(self.winfo_screenwidth()/2 - self.about_window.width/2)
+        if (center_y < 0):
+            center_y = int(self.winfo_screenheight()/2 - self.about_window.height/2)
+
+        self.about_window.geometry(self.about_window.dimensions+"+%d+%d"%(center_x, center_y))
+        self.about_window.resizable(0,0)
+        self.wait_visibility(self.about_window)
+        self.about_window.grab_set()
+        self.about_window.focus_set()
+        self.about_icon = ctk.CTkImage(Image.open(ROOTDIR+"assets/toice.png"), size=(150, 150))
+        self.about_image = ctk.CTkLabel(self.about_window, image=self.about_icon, text=None)
+        self.about_image.pack(pady=15)
+        self.about_text = tk.Label(self.about_window, text="Toice : A text to speech app\n\nVersion - 0.0.0_alpha (Unstable build)\n\nAUTHOR : Arijit Kumar Das <arijitkdgit.official@gmail.com>\n\nToice is a free software, you may distribute Toice under the terms\nof the GNU GPL v3. You should have received a copy of the LICENSE\nwith Toice. If not, check out the terms of GNU GPL v3 online.", font=(self.font[0], 10))
+        self.about_text.pack(padx=15)
+
+
+    def alter_textbox_placeholder(self):
+        if (self.textbox.get("1.0", tk.END).strip('\n') != ""):
+            self.textbox_placeholder.grid_forget()
+        else:
+            self.textbox_placeholder.grid(row=0, column=0, sticky=tk.NW, padx=15, pady=10)
+        self.textbox_placeholder.update()
+        return self.after(50, self.alter_textbox_placeholder)
+
+
     def add_widgets(self):
 
         # Adding the Text area
         self.textbox = ctk.CTkTextbox(self.background, font=self.font, border_width=3,
                                         border_color= '#5f00a4', corner_radius=10, wrap='word', fg_color='#1c1b22')
+        self.textbox_placeholder = ctk.CTkLabel(self.textbox, text=self.uilang["TextboxPlaceholderLabel"], font=self.font, text_color='gray')
+        self.textbox_placeholder.grid(row=0, column=0, sticky=tk.NW, padx=15, pady=10)
         self.background.create_window(20, 100, anchor=tk.NW, window=self.textbox)
 
         # Add a Settings button
@@ -568,7 +634,7 @@ class Toice(tk.Tk):
         self.settingsbtn = ctk.CTkButton(self.tool_frame, image=self.settingsbtn_icon, text=None, command=self.show_settingsmenu, width=60, height=60,
                                         hover_color='#5f00a4', fg_color=self.accent_color, corner_radius=10)
         self.settingsbtn.pack(side=tk.RIGHT, padx=(10, 0))
-        self.aboutbtn = ctk.CTkButton(self.tool_frame, image=self.aboutbtn_icon, text=None, command=self.show_settingsmenu, width=60, height=60,
+        self.aboutbtn = ctk.CTkButton(self.tool_frame, image=self.aboutbtn_icon, text=None, command=self.show_about, width=60, height=60,
                                         hover_color='#5f00a4', fg_color=self.accent_color, corner_radius=10)
         self.aboutbtn.pack(side=tk.LEFT)
         self.tool_frame_canvasid = self.background.create_window(int(self.config["WindowWidth"])-20, 20, anchor=tk.NE, window=self.tool_frame)
@@ -655,7 +721,7 @@ class Toice(tk.Tk):
         self.volume_slider = ctk.CTkSlider(self.volume_frame, from_=0, to=100, progress_color="#9400ff", fg_color='white', button_color="#9400ff", button_hover_color="#5f00a4", bg_color=self.accent_color,
                                             command = self.volume_slider_cb)
         self.volume_slider.set(int(self.config["AudioVolume"]))
-        pygame.mixer.music.set_volume(int(self.config["AudioVolume"])/100)
+        mixer.music.set_volume(int(self.config["AudioVolume"])/100)
         self.volume_slider.pack(fill=tk.X, expand=True, side=tk.RIGHT)
 
         #self.waveform_label = tk.Label(self.waveform_frame, bg=self.accent_color)
@@ -787,6 +853,7 @@ class Toice(tk.Tk):
 
     def show_settingsmenu(self):
         # Running settings menu
+        last_uilang = self.config["UILanguage"]
         self.log ("Running settings menu...")
         self.settingsmenu= ToiceSettingsMenu(self, self.config, self.uilang)
         self.settingsmenu.run()
@@ -794,6 +861,13 @@ class Toice(tk.Tk):
         self.config = self.settingsmenu.config.copy()
         self.settings_changed = self.settingsmenu.settings_changed
         self.log ("Saved settings loaded")
+        if (self.config["UILanguage"] != last_uilang):
+            response = mbox.askyesno (APPNAME, self.uilang["UILanguageChangeAlert"])
+            if (response == True):
+                self.exit()
+                logging = self.logging
+                del self
+                return start_toice(logging=logging)
         
 
         
@@ -992,9 +1066,14 @@ class Toice(tk.Tk):
         self.bind("<FocusIn>", lambda event: self.textbox.focus_set())
         self.textbox.focus_set()
         self.reset_pause_state()
+        self.alter_textbox_placeholder()
         self.mainloop()
         
 
-if (__name__ == "__main__"):
-    toice = Toice(logging=True)
+def start_toice(logging=False):
+    toice = Toice(logging=logging)
     toice.run()
+
+
+if (__name__ == "__main__"):
+    start_toice(logging=True)
